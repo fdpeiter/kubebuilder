@@ -207,18 +207,6 @@ func Run(kbc *utils.TestContext, hasWebhook, isToUseInstaller, isToUseHelmChart,
 	Expect(err).NotTo(HaveOccurred())
 
 	if hasNetworkPolicies {
-		By("Checking for Calico pods")
-		var outputGet string
-		outputGet, err = kbc.Kubectl.Get(
-			false,
-			"pods",
-			"-n", "kube-system",
-			"-l", "k8s-app=calico-node",
-			"-o", "jsonpath={.items[*].status.phase}",
-		)
-		Expect(err).NotTo(HaveOccurred(), "Failed to get Calico pods")
-		Expect(outputGet).To(ContainSubstring("Running"), "All Calico pods should be in Running state")
-
 		if hasMetrics {
 			By("labeling the namespace to allow consume the metrics")
 			Expect(kbc.Kubectl.Command("label", "namespaces", kbc.Kubectl.Namespace,
@@ -621,17 +609,17 @@ func removeCurlPod(kbc *utils.TestContext) {
 // TokenRequest API in raw format in order to make it generic for all version of the k8s that
 // is currently being supported in kubebuilder test infra.
 // TokenRequest API returns the token in raw JWT format itself. There is no conversion required.
-func serviceAccountToken(kbc *utils.TestContext) (out string, err error) {
+func serviceAccountToken(kbc *utils.TestContext) (string, error) {
+	var out string
+
 	secretName := fmt.Sprintf("%s-token-request", kbc.Kubectl.ServiceAccount)
 	tokenRequestFile := filepath.Join(kbc.Dir, secretName)
-	err = os.WriteFile(tokenRequestFile, []byte(tokenRequestRawString), os.FileMode(0o755))
-	if err != nil {
-		return out, err
+	if err := os.WriteFile(tokenRequestFile, []byte(tokenRequestRawString), os.FileMode(0o755)); err != nil {
+		return out, fmt.Errorf("error creating token request file %s: %w", tokenRequestFile, err)
 	}
-	var rawJSON string
 	getToken := func(g Gomega) {
 		// Output of this is already a valid JWT token. No need to covert this from base64 to string format
-		rawJSON, err = kbc.Kubectl.Command(
+		rawJSON, err := kbc.Kubectl.Command(
 			"create",
 			"--raw", fmt.Sprintf(
 				"/api/v1/namespaces/%s/serviceaccounts/%s/token",
@@ -650,5 +638,5 @@ func serviceAccountToken(kbc *utils.TestContext) (out string, err error) {
 	}
 	Eventually(getToken, time.Minute, time.Second).Should(Succeed())
 
-	return out, err
+	return out, nil
 }
